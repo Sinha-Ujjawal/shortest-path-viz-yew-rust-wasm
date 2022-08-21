@@ -4,8 +4,6 @@ use wasm_bindgen::JsCast;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
 
-mod components;
-
 const MIN_WIDTH: u8 = 10;
 const MAX_WIDTH: u8 = 50;
 const MIN_HEIGHT: u8 = 10;
@@ -18,14 +16,14 @@ enum SymbolType {
     Obstacle,
 }
 
-impl SymbolType {
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for SymbolType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use SymbolType::*;
-        match self {
-            Start => "🟢".to_owned(),
-            End => "🔴".to_owned(),
-            Obstacle => "🚧".to_owned(),
-        }
+        f.write_str(match self {
+            Start => "🟢",
+            End => "🔴",
+            Obstacle => "🚧",
+        })
     }
 }
 
@@ -35,12 +33,12 @@ enum ClickButtonType {
     Delete,
 }
 
-impl ClickButtonType {
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for ClickButtonType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use ClickButtonType::*;
         match self {
-            ST(st) => format!("Click on grid cell to put {}", st.to_string()),
-            Delete => "Click on grid cell to clear the symbol".to_owned(),
+            ST(st) => f.write_str(&format!("Click on grid cell to put {}", st)),
+            Delete => f.write_str("Click on grid cell to clear the symbol"),
         }
     }
 }
@@ -349,9 +347,9 @@ impl Model {
 
 impl Model {
     fn symbol_type_at_position(&self, pos: &Position) -> Option<SymbolType> {
-        if Some((*pos).clone()) == self.start {
+        if Some(*pos) == self.start {
             Some(SymbolType::Start)
-        } else if Some((*pos).clone()) == self.end {
+        } else if Some(*pos) == self.end {
             Some(SymbolType::End)
         } else if self.obstacles.contains(pos) {
             Some(SymbolType::Obstacle)
@@ -362,29 +360,31 @@ impl Model {
 
     fn apply_click_button_type_on_cell(&mut self, pos: &Position) {
         match self.symbol_type_at_position(pos) {
-            Some(st) => match self.click_button_type {
-                ClickButtonType::Delete => match st {
-                    SymbolType::Start => {
-                        self.start = None;
+            Some(st) => {
+                if self.click_button_type == ClickButtonType::Delete {
+                    match st {
+                        SymbolType::Start => {
+                            self.start = None;
+                        }
+                        SymbolType::End => {
+                            self.end = None;
+                        }
+                        SymbolType::Obstacle => {
+                            self.obstacles.remove(pos);
+                        }
                     }
-                    SymbolType::End => {
-                        self.end = None;
-                    }
-                    SymbolType::Obstacle => {
-                        self.obstacles.remove(pos);
-                    }
-                },
-                _ => {}
-            },
+                } else {
+                }
+            }
             None => match self.click_button_type {
                 ClickButtonType::ST(SymbolType::Start) => {
-                    self.start = Some((*pos).clone());
+                    self.start = Some(*pos);
                 }
                 ClickButtonType::ST(SymbolType::End) => {
-                    self.end = Some((*pos).clone());
+                    self.end = Some(*pos);
                 }
                 ClickButtonType::ST(SymbolType::Obstacle) => {
-                    self.obstacles.insert((*pos).clone());
+                    self.obstacles.insert(*pos);
                 }
                 _ => {}
             },
