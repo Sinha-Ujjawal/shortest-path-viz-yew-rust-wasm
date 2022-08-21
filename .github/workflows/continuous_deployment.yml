@@ -2,7 +2,7 @@
 name: Continuous deployment
 on:
   workflow_run:
-    branches: [main]
+    branches: [master]
     workflows: [Continuous integration]
     types: [completed]
 
@@ -23,7 +23,7 @@ jobs:
       - run: trunk build --release
 
       - uses: peaceiris/actions-gh-pages@v3
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/master'
         with:
           github_token: $
           publish_dir: ./dist
