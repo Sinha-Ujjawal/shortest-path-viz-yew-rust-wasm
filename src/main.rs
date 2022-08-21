@@ -4,6 +4,8 @@ use wasm_bindgen::JsCast;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
 
+mod bfs;
+
 const MIN_WIDTH: u8 = 10;
 const MAX_WIDTH: u8 = 50;
 const MIN_HEIGHT: u8 = 10;
@@ -49,6 +51,66 @@ struct Position {
     x: u8,
 }
 
+impl Position {
+    fn simple_neighbors(&self) -> HashSet<Position> {
+        let mut ret: HashSet<Position> = HashSet::new();
+        if self.y > 0 {
+            ret.insert(Position {
+                y: self.y - 1,
+                x: self.x,
+            });
+        }
+        if self.y < u8::MAX {
+            ret.insert(Position {
+                y: self.y + 1,
+                x: self.x,
+            });
+        }
+        if self.x > 0 {
+            ret.insert(Position {
+                y: self.y,
+                x: self.x - 1,
+            });
+        }
+        if self.x < u8::MAX {
+            ret.insert(Position {
+                y: self.y,
+                x: self.x + 1,
+            });
+        }
+        ret
+    }
+
+    fn neighbors_with_diagonals(&self) -> HashSet<Position> {
+        let mut ret = self.simple_neighbors();
+        if self.y > 0 && self.x > 0 {
+            ret.insert(Position {
+                y: self.y - 1,
+                x: self.x - 1,
+            });
+        }
+        if self.y > 0 && self.x < u8::MAX {
+            ret.insert(Position {
+                y: self.y - 1,
+                x: self.x + 1,
+            });
+        }
+        if self.y < u8::MAX && self.x > 0 {
+            ret.insert(Position {
+                y: self.y + 1,
+                x: self.x - 1,
+            });
+        }
+        if self.y < u8::MAX && self.x < u8::MAX {
+            ret.insert(Position {
+                y: self.y + 1,
+                x: self.x + 1,
+            });
+        }
+        ret
+    }
+}
+
 #[derive(Debug)]
 struct Model {
     start: Option<Position>,
@@ -59,7 +121,6 @@ struct Model {
     width: u8,
     height: u8,
     allow_diagonal: bool,
-    disable_input: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -71,7 +132,6 @@ enum Msg {
     SetWidth(u8),
     SetHeight(u8),
     ToggleDiagonal,
-    // SetPath(HashSet<Position>),
 }
 
 impl Model {
@@ -85,15 +145,14 @@ impl Model {
             width,
             height,
             allow_diagonal: false,
-            disable_input: false,
         }
     }
 }
 
 impl Model {
-    fn draw_button(is_disabled: bool, button_text: &str, onclick: Callback<MouseEvent>) -> Html {
+    fn draw_button(button_text: &str, onclick: Callback<MouseEvent>) -> Html {
         html! {
-            <button onclick={onclick} class={css!("margin: 10px;")} disabled={is_disabled}>
+            <button onclick={onclick} class={css!("margin: 10px;")}>
                 {button_text}
             </button>
         }
@@ -101,7 +160,6 @@ impl Model {
 
     fn draw_start_button(&self, ctx: &Context<Self>) -> Html {
         Self::draw_button(
-            self.disable_input,
             &SymbolType::Start.to_string(),
             ctx.link()
                 .callback(|_| Msg::SwitchClickButtonType(ClickButtonType::ST(SymbolType::Start))),
@@ -110,7 +168,6 @@ impl Model {
 
     fn draw_end_button(&self, ctx: &Context<Self>) -> Html {
         Self::draw_button(
-            self.disable_input,
             &SymbolType::End.to_string(),
             ctx.link()
                 .callback(|_| Msg::SwitchClickButtonType(ClickButtonType::ST(SymbolType::End))),
@@ -119,7 +176,6 @@ impl Model {
 
     fn draw_obstacle_button(&self, ctx: &Context<Self>) -> Html {
         Self::draw_button(
-            self.disable_input,
             &SymbolType::Obstacle.to_string(),
             ctx.link().callback(|_| {
                 Msg::SwitchClickButtonType(ClickButtonType::ST(SymbolType::Obstacle))
@@ -129,7 +185,6 @@ impl Model {
 
     fn draw_delete_button(&self, ctx: &Context<Self>) -> Html {
         Self::draw_button(
-            self.disable_input,
             "x",
             ctx.link()
                 .callback(|_| Msg::SwitchClickButtonType(ClickButtonType::Delete)),
@@ -145,24 +200,15 @@ impl Model {
     }
 
     fn draw_compute_path_button(&self, ctx: &Context<Self>) -> Html {
-        Self::draw_button(
-            self.disable_input,
-            "Compute Path",
-            ctx.link().callback(|_| Msg::ComputePath),
-        )
+        Self::draw_button("Compute Path", ctx.link().callback(|_| Msg::ComputePath))
     }
 
     fn draw_reset_button(&self, ctx: &Context<Self>) -> Html {
-        Self::draw_button(
-            self.disable_input,
-            "Reset",
-            ctx.link().callback(|_| Msg::Reset),
-        )
+        Self::draw_button("Reset", ctx.link().callback(|_| Msg::Reset))
     }
 
     fn draw_slider<A: std::fmt::Display>(
         ctx: &Context<Self>,
-        is_disabled: bool,
         label: &str,
         label_value: A,
         min: A,
@@ -186,42 +232,24 @@ impl Model {
                     value={format!("{}", label_value)}
                     min={format!("{}", min)}
                     max={format!("{}", max)}
-                    disabled={is_disabled}
                 />
             </div>
         }
     }
 
     fn draw_set_width_slider(&self, ctx: &Context<Self>) -> Html {
-        Self::draw_slider(
-            ctx,
-            self.disable_input,
-            "Width",
-            self.width,
-            MIN_WIDTH,
-            MAX_WIDTH,
-            |data| Msg::SetWidth(data.parse::<u8>().unwrap_or(0)),
-        )
+        Self::draw_slider(ctx, "Width", self.width, MIN_WIDTH, MAX_WIDTH, |data| {
+            Msg::SetWidth(data.parse::<u8>().unwrap_or(0))
+        })
     }
 
     fn draw_set_height_slider(&self, ctx: &Context<Self>) -> Html {
-        Self::draw_slider(
-            ctx,
-            self.disable_input,
-            "Height",
-            self.height,
-            MIN_HEIGHT,
-            MAX_HEIGHT,
-            |data| Msg::SetHeight(data.parse::<u8>().unwrap_or(0)),
-        )
+        Self::draw_slider(ctx, "Height", self.height, MIN_HEIGHT, MAX_HEIGHT, |data| {
+            Msg::SetHeight(data.parse::<u8>().unwrap_or(0))
+        })
     }
 
-    fn draw_checkbox(
-        is_disabled: bool,
-        label: &str,
-        is_checked: bool,
-        onclick: Callback<InputEvent>,
-    ) -> Html {
+    fn draw_checkbox(label: &str, is_checked: bool, onclick: Callback<InputEvent>) -> Html {
         html! {
             <div>
                 <div> {label} </div>
@@ -229,7 +257,6 @@ impl Model {
                     type="checkbox"
                     oninput={onclick}
                     checked={is_checked}
-                    disabled={is_disabled}
                 />
             </div>
         }
@@ -237,7 +264,6 @@ impl Model {
 
     fn draw_allow_diagonal_checkbox(&self, ctx: &Context<Self>) -> Html {
         Self::draw_checkbox(
-            self.disable_input,
             "Allow Diagonal",
             self.allow_diagonal,
             ctx.link().callback(|_| Msg::ToggleDiagonal),
@@ -257,14 +283,14 @@ impl Model {
         )
     }
 
-    fn draw_empty_cell(id: String, onclick: Option<Callback<MouseEvent>>) -> Html {
+    fn draw_empty_cell(id: String, onclick: Callback<MouseEvent>) -> Html {
         html! {
             <div id={id} onclick={onclick} class={Self::cell_style()}>
             </div>
         }
     }
 
-    fn draw_start_cell(id: String, onclick: Option<Callback<MouseEvent>>) -> Html {
+    fn draw_start_cell(id: String, onclick: Callback<MouseEvent>) -> Html {
         html! {
             <div id={id} onclick={onclick} class={Self::cell_style()}>
                 {SymbolType::Start.to_string()}
@@ -272,7 +298,7 @@ impl Model {
         }
     }
 
-    fn draw_end_cell(id: String, onclick: Option<Callback<MouseEvent>>) -> Html {
+    fn draw_end_cell(id: String, onclick: Callback<MouseEvent>) -> Html {
         html! {
             <div id={id} onclick={onclick} class={Self::cell_style()}>
                 {SymbolType::End.to_string()}
@@ -280,7 +306,7 @@ impl Model {
         }
     }
 
-    fn draw_obstacle_cell(id: String, onclick: Option<Callback<MouseEvent>>) -> Html {
+    fn draw_obstacle_cell(id: String, onclick: Callback<MouseEvent>) -> Html {
         html! {
             <div id={id} onclick={onclick} class={Self::cell_style()}>
                 {SymbolType::Obstacle.to_string()}
@@ -288,7 +314,7 @@ impl Model {
         }
     }
 
-    fn draw_path_cell(id: String, onclick: Option<Callback<MouseEvent>>) -> Html {
+    fn draw_path_cell(id: String, onclick: Callback<MouseEvent>) -> Html {
         html! {
             <div id={id} onclick={onclick} class={classes!(css!("background-color: black;"), Self::cell_style())}>
             </div>
@@ -297,14 +323,9 @@ impl Model {
 
     fn draw_cell(&self, y: u8, x: u8, ctx: &Context<Self>) -> Html {
         let pos = Position { y, x };
-        let onclick = if self.disable_input {
-            None
-        } else {
-            Some(
-                ctx.link()
-                    .callback(move |_| Msg::ApplyClickButtonTypeOnCell(pos)),
-            )
-        };
+        let onclick = ctx
+            .link()
+            .callback(move |_| Msg::ApplyClickButtonTypeOnCell(pos));
         let id = format!("{},{}", y, x);
         if Some(pos) == self.start {
             Self::draw_start_cell(id, onclick)
@@ -409,29 +430,50 @@ impl Component for Model {
             }
             ApplyClickButtonTypeOnCell(pos) => {
                 self.apply_click_button_type_on_cell(&pos);
+                self.path = HashSet::new();
                 true
             }
-            ComputePath => true,
+            ComputePath => match (self.start, self.end) {
+                (Some(start), Some(end)) => {
+                    let obstacles = &self.obstacles;
+                    let width = self.width;
+                    let height = self.height;
+                    let allow_diagonal = self.allow_diagonal;
+                    self.path = bfs::shortest_path(start, end, &move |pos: Position| {
+                        (if allow_diagonal {
+                            pos.neighbors_with_diagonals()
+                        } else {
+                            pos.simple_neighbors()
+                        })
+                        .into_iter()
+                        .filter(|p| (p.x < width) && (p.y < height) && (!obstacles.contains(p)))
+                        .collect()
+                    })
+                    .into_iter()
+                    .collect();
+                    true
+                }
+                _ => false,
+            },
             Reset => {
                 *self = Self::create(ctx);
                 true
             }
             SetWidth(width) => {
                 self.width = width;
+                self.path = HashSet::new();
                 true
             }
             SetHeight(height) => {
                 self.height = height;
+                self.path = HashSet::new();
                 true
             }
             ToggleDiagonal => {
                 self.allow_diagonal = !self.allow_diagonal;
+                self.path = HashSet::new();
                 true
-            } // SetPath(path) => {
-              //     self.path = path;
-              //     self.disable_input = false;
-              //     true
-              // }
+            }
         }
     }
 
