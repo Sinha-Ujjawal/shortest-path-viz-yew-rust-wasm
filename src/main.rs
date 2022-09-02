@@ -1,10 +1,9 @@
 use std::collections::HashSet;
 use stylist::{css, StyleSource};
-use wasm_bindgen::JsCast;
-use web_sys::HtmlInputElement;
-use yew::prelude::*;
+use yew::{classes, html, Callback, Component, Context, Html, MouseEvent};
 
 mod bfs;
+mod simple_components;
 
 const MIN_WIDTH: u8 = 10;
 const MAX_WIDTH: u8 = 50;
@@ -150,45 +149,28 @@ impl Model {
 }
 
 impl Model {
-    fn draw_button(button_text: &str, onclick: Callback<MouseEvent>) -> Html {
-        html! {
-            <button onclick={onclick} class={css!("margin: 10px;")}>
-                {button_text}
-            </button>
-        }
-    }
-
     fn draw_start_button(&self, ctx: &Context<Self>) -> Html {
-        Self::draw_button(
-            &SymbolType::Start.to_string(),
-            ctx.link()
-                .callback(|_| Msg::SwitchClickButtonType(ClickButtonType::ST(SymbolType::Start))),
-        )
+        simple_components::draw_button(ctx, &SymbolType::Start.to_string(), || {
+            Msg::SwitchClickButtonType(ClickButtonType::ST(SymbolType::Start))
+        })
     }
 
     fn draw_end_button(&self, ctx: &Context<Self>) -> Html {
-        Self::draw_button(
-            &SymbolType::End.to_string(),
-            ctx.link()
-                .callback(|_| Msg::SwitchClickButtonType(ClickButtonType::ST(SymbolType::End))),
-        )
+        simple_components::draw_button(ctx, &SymbolType::End.to_string(), || {
+            Msg::SwitchClickButtonType(ClickButtonType::ST(SymbolType::End))
+        })
     }
 
     fn draw_obstacle_button(&self, ctx: &Context<Self>) -> Html {
-        Self::draw_button(
-            &SymbolType::Obstacle.to_string(),
-            ctx.link().callback(|_| {
-                Msg::SwitchClickButtonType(ClickButtonType::ST(SymbolType::Obstacle))
-            }),
-        )
+        simple_components::draw_button(ctx, &SymbolType::Obstacle.to_string(), || {
+            Msg::SwitchClickButtonType(ClickButtonType::ST(SymbolType::Obstacle))
+        })
     }
 
     fn draw_delete_button(&self, ctx: &Context<Self>) -> Html {
-        Self::draw_button(
-            "x",
-            ctx.link()
-                .callback(|_| Msg::SwitchClickButtonType(ClickButtonType::Delete)),
-        )
+        simple_components::draw_button(ctx, "x", || {
+            Msg::SwitchClickButtonType(ClickButtonType::Delete)
+        })
     }
 
     fn draw_current_click_button_type_message(&self) -> Html {
@@ -200,74 +182,41 @@ impl Model {
     }
 
     fn draw_compute_path_button(&self, ctx: &Context<Self>) -> Html {
-        Self::draw_button("Compute Path", ctx.link().callback(|_| Msg::ComputePath))
+        simple_components::draw_button(ctx, "Compute Path", || Msg::ComputePath)
     }
 
     fn draw_reset_button(&self, ctx: &Context<Self>) -> Html {
-        Self::draw_button("Reset", ctx.link().callback(|_| Msg::Reset))
-    }
-
-    fn draw_slider<A: std::fmt::Display>(
-        ctx: &Context<Self>,
-        label: &str,
-        label_value: A,
-        min: A,
-        max: A,
-        mk_event: fn(String) -> Msg,
-    ) -> Html {
-        let link = ctx.link();
-
-        html! {
-            <div>
-                <div>
-                    { format!("{}: {}", label, label_value) }
-                </div>
-                <input
-                    type="range"
-                    oninput={link.batch_callback(move |e: InputEvent| {
-                        let target = e.target();
-                        let input = target.and_then(|t| t.dyn_into::<HtmlInputElement>().ok());
-                        input.map(|input| mk_event(input.value()))
-                    })}
-                    value={format!("{}", label_value)}
-                    min={format!("{}", min)}
-                    max={format!("{}", max)}
-                />
-            </div>
-        }
+        simple_components::draw_button(ctx, "Reset", || Msg::Reset)
     }
 
     fn draw_set_width_slider(&self, ctx: &Context<Self>) -> Html {
-        Self::draw_slider(ctx, "Width", self.width, MIN_WIDTH, MAX_WIDTH, |data| {
-            Msg::SetWidth(data.parse::<u8>().unwrap_or(0))
-        })
+        simple_components::draw_slider(
+            ctx,
+            "Width",
+            self.width,
+            MIN_WIDTH,
+            MAX_WIDTH,
+            0,
+            Msg::SetWidth,
+        )
     }
 
     fn draw_set_height_slider(&self, ctx: &Context<Self>) -> Html {
-        Self::draw_slider(ctx, "Height", self.height, MIN_HEIGHT, MAX_HEIGHT, |data| {
-            Msg::SetHeight(data.parse::<u8>().unwrap_or(0))
-        })
-    }
-
-    fn draw_checkbox(label: &str, is_checked: bool, onclick: Callback<InputEvent>) -> Html {
-        html! {
-            <div>
-                <div> {label} </div>
-                <input
-                    type="checkbox"
-                    oninput={onclick}
-                    checked={is_checked}
-                />
-            </div>
-        }
+        simple_components::draw_slider(
+            ctx,
+            "Height",
+            self.height,
+            MIN_HEIGHT,
+            MAX_HEIGHT,
+            0,
+            Msg::SetHeight,
+        )
     }
 
     fn draw_allow_diagonal_checkbox(&self, ctx: &Context<Self>) -> Html {
-        Self::draw_checkbox(
-            "Allow Diagonal",
-            self.allow_diagonal,
-            ctx.link().callback(|_| Msg::ToggleDiagonal),
-        )
+        simple_components::draw_checkbox(ctx, "Allow Diagonal", self.allow_diagonal, || {
+            Msg::ToggleDiagonal
+        })
     }
 
     fn cell_style() -> StyleSource<'static> {
